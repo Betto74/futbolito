@@ -25,8 +25,12 @@ import com.example.fucho.ui.theme.FuchoTheme
 
 import android.content.res.Configuration
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.LaunchedEffect
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,8 +38,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import dev.ricknout.composesensors.accelerometer.isAccelerometerSensorAvailable
 import dev.ricknout.composesensors.accelerometer.rememberAccelerometerSensorValueAsState
+import kotlinx.coroutines.delay
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 class MainActivity : ComponentActivity() {
@@ -55,6 +62,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AccelerometerDemo() {
     if (isAccelerometerSensorAvailable()) {
+        var scoreTop by remember { mutableStateOf(0) }
+        var scoreBottom by remember { mutableStateOf(0) }
+
         BoxWithConstraints(
             modifier = Modifier.fillMaxSize()
         ) {
@@ -70,78 +80,128 @@ fun AccelerometerDemo() {
             val contentColor = LocalContentColor.current
             val radius = with(LocalDensity.current) { 10.dp.toPx() }
 
-            val goalWidth = width * 0.3f // 30% del ancho de la pantalla
-            val goalHeight = 50f // Altura de la portería
+            val goalWidth = width * 0.3f
+            val borderThickness = 50f
 
-            val speedMultiplier = 0.5f // Factor de ajuste de aceleración
-            val friction = 0.98f // Para reducir la velocidad con el tiempo
+            val topMargin = height * 0.2f
+            val bottomMargin = height * 0.8f
 
-            // Definir márgenes superior e inferior
-            val topMargin = height * 0.1f
-            val bottomMargin = height * 0.9f
+            val speedMultiplier = 0.5f
+            val friction = 0.98f
 
-            // Aplicar aceleración al movimiento
             velocityX += -ax * speedMultiplier
             velocityY += ay * speedMultiplier
 
-            // Aplicar fricción para reducir la velocidad con el tiempo
             velocityX *= friction
             velocityY *= friction
 
-            // Calcular la nueva posición
             var newX = center.x + velocityX
             var newY = center.y + velocityY
 
-            // Si la bola toca los bordes, invertir la dirección (rebote)
-            if (newX - radius < 0f || newX + radius > width) {
-                velocityX = -velocityX * 0.8f // Rebote con pérdida de energía
+            if (newX - radius < borderThickness || newX + radius > width - borderThickness) {
+                velocityX = -velocityX * 0.8f
                 newX = center.x + velocityX
             }
-            if (newY - radius < topMargin || newY + radius > bottomMargin) {
-                velocityY = -velocityY * 0.8f // Rebote con pérdida de energía
+
+            val isTouchingTopBorder = newY - radius < topMargin &&
+                    !(newX in (width - goalWidth) / 2..(width + goalWidth) / 2)
+            val isTouchingBottomBorder = newY + radius > bottomMargin &&
+                    !(newX in (width - goalWidth) / 2..(width + goalWidth) / 2)
+
+            if (isTouchingTopBorder || isTouchingBottomBorder) {
+                velocityY = -velocityY * 0.8f
                 newY = center.y + velocityY
             }
 
+            newY = newY.coerceIn(topMargin + radius, bottomMargin - radius)
+
             center = Offset(newX, newY)
 
-            // Definir posiciones de las porterías
-            val goalTop = Offset((width - goalWidth) / 2, topMargin)
-            val goalBottom = Offset((width - goalWidth) / 2, bottomMargin - goalHeight)
+            val goalTop = Offset((width - goalWidth) / 2, topMargin - borderThickness)
+            val goalBottom = Offset((width - goalWidth) / 2, bottomMargin)
 
-            // Verificar si la bola toca alguna portería
-            val inGoalTop = newY - radius <= goalHeight + topMargin &&
+            val inGoalTop = newY - radius <= topMargin &&
                     newX in goalTop.x..(goalTop.x + goalWidth)
-            val inGoalBottom = newY + radius >= (bottomMargin - goalHeight) &&
+            val inGoalBottom = newY + radius >= bottomMargin &&
                     newX in goalBottom.x..(goalBottom.x + goalWidth)
 
-            if (inGoalTop || inGoalBottom) {
-                center = Offset(width / 2, height / 2) // Reiniciar la bola al centro
+
+            if (inGoalTop) {
+                scoreBottom++ // Gol en la portería superior
+                center = Offset(width / 2, height / 2)
+                velocityX = 0f
+                velocityY = 0f
+
+            } else if (inGoalBottom) {
+                scoreTop++ // Gol en la portería inferior
+                center = Offset(width / 2, height / 2)
                 velocityX = 0f
                 velocityY = 0f
             }
 
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                // Dibujar la bola
-                drawCircle(
-                    color = contentColor,
-                    radius = radius,
-                    center = center,
-                )
+            Box(modifier = Modifier.fillMaxSize()) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawCircle(color = contentColor, radius = radius, center = center)
 
-                // Dibujar porterías
-                drawRect(
-                    color = Color.Red,
-                    topLeft = goalTop,
-                    size = Size(goalWidth, goalHeight)
-                )
-                drawRect(
-                    color = Color.Blue,
-                    topLeft = goalBottom,
-                    size = Size(goalWidth, goalHeight)
-                )
+                    drawRect(
+                        color = Color.Black,
+                        topLeft = Offset(0f, topMargin),
+                        size = Size(borderThickness, bottomMargin - topMargin)
+                    )
+                    drawRect(
+                        color = Color.Black,
+                        topLeft = Offset(width - borderThickness, topMargin),
+                        size = Size(borderThickness, bottomMargin - topMargin)
+                    )
+
+                    drawRect(
+                        color = Color.Black,
+                        topLeft = Offset(0f, topMargin - borderThickness),
+                        size = Size((width - goalWidth) / 2, borderThickness)
+                    )
+                    drawRect(
+                        color = Color.Black,
+                        topLeft = Offset((width + goalWidth) / 2, topMargin - borderThickness),
+                        size = Size((width - goalWidth) / 2, borderThickness)
+                    )
+                    drawRect(
+                        color = Color.Black,
+                        topLeft = Offset(0f, bottomMargin),
+                        size = Size((width - goalWidth) / 2, borderThickness)
+                    )
+                    drawRect(
+                        color = Color.Black,
+                        topLeft = Offset((width + goalWidth) / 2, bottomMargin),
+                        size = Size((width - goalWidth) / 2, borderThickness)
+                    )
+
+                    drawRect(
+                        color = Color.Red,
+                        topLeft = goalTop,
+                        size = Size(goalWidth, borderThickness)
+                    )
+                    drawRect(
+                        color = Color.Blue,
+                        topLeft = goalBottom,
+                        size = Size(goalWidth, borderThickness)
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 50.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "🔴 $scoreTop - $scoreBottom 🔵",
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
             }
         }
     }
 }
-
 
