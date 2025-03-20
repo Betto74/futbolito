@@ -32,6 +32,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import dev.ricknout.composesensors.accelerometer.isAccelerometerSensorAvailable
 import dev.ricknout.composesensors.accelerometer.rememberAccelerometerSensorValueAsState
 
@@ -50,46 +52,96 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-
-
-
 @Composable
 fun AccelerometerDemo() {
     if (isAccelerometerSensorAvailable()) {
         BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-
+            modifier = Modifier.fillMaxSize()
         ) {
             val sensorValue by rememberAccelerometerSensorValueAsState()
-            val (x, y, z) = sensorValue.value
+            val (ax, ay, _) = sensorValue.value
 
             val width = constraints.maxWidth.toFloat()
             val height = constraints.maxHeight.toFloat()
             var center by remember { mutableStateOf(Offset(width / 2, height / 2)) }
+            var velocityX by remember { mutableStateOf(0f) }
+            var velocityY by remember { mutableStateOf(0f) }
 
             val contentColor = LocalContentColor.current
             val radius = with(LocalDensity.current) { 10.dp.toPx() }
 
-            val speed = 2f
-            center =
-                Offset(
-                    x = (center.x - x*speed).coerceIn(radius, width - radius),
-                    y = (center.y + y*speed).coerceIn(radius, height - radius),
-                )
+            val goalWidth = width * 0.3f // 30% del ancho de la pantalla
+            val goalHeight = 50f // Altura de la portería
+
+            val speedMultiplier = 0.5f // Factor de ajuste de aceleración
+            val friction = 0.98f // Para reducir la velocidad con el tiempo
+
+            // Definir márgenes superior e inferior
+            val topMargin = height * 0.1f
+            val bottomMargin = height * 0.9f
+
+            // Aplicar aceleración al movimiento
+            velocityX += -ax * speedMultiplier
+            velocityY += ay * speedMultiplier
+
+            // Aplicar fricción para reducir la velocidad con el tiempo
+            velocityX *= friction
+            velocityY *= friction
+
+            // Calcular la nueva posición
+            var newX = center.x + velocityX
+            var newY = center.y + velocityY
+
+            // Si la bola toca los bordes, invertir la dirección (rebote)
+            if (newX - radius < 0f || newX + radius > width) {
+                velocityX = -velocityX * 0.8f // Rebote con pérdida de energía
+                newX = center.x + velocityX
+            }
+            if (newY - radius < topMargin || newY + radius > bottomMargin) {
+                velocityY = -velocityY * 0.8f // Rebote con pérdida de energía
+                newY = center.y + velocityY
+            }
+
+            center = Offset(newX, newY)
+
+            // Definir posiciones de las porterías
+            val goalTop = Offset((width - goalWidth) / 2, topMargin)
+            val goalBottom = Offset((width - goalWidth) / 2, bottomMargin - goalHeight)
+
+            // Verificar si la bola toca alguna portería
+            val inGoalTop = newY - radius <= goalHeight + topMargin &&
+                    newX in goalTop.x..(goalTop.x + goalWidth)
+            val inGoalBottom = newY + radius >= (bottomMargin - goalHeight) &&
+                    newX in goalBottom.x..(goalBottom.x + goalWidth)
+
+            if (inGoalTop || inGoalBottom) {
+                center = Offset(width / 2, height / 2) // Reiniciar la bola al centro
+                velocityX = 0f
+                velocityY = 0f
+            }
 
             Canvas(modifier = Modifier.fillMaxSize()) {
+                // Dibujar la bola
                 drawCircle(
                     color = contentColor,
                     radius = radius,
                     center = center,
                 )
+
+                // Dibujar porterías
+                drawRect(
+                    color = Color.Red,
+                    topLeft = goalTop,
+                    size = Size(goalWidth, goalHeight)
+                )
+                drawRect(
+                    color = Color.Blue,
+                    topLeft = goalBottom,
+                    size = Size(goalWidth, goalHeight)
+                )
             }
-
         }
-
-    } else {
-
     }
 }
+
 
