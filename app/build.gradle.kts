@@ -68,5 +68,6 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 
     implementation("dev.ricknout.composesensors:composesensors:0.2.0")
+    implementation(kotlin("script-runtime"))
 
 }
